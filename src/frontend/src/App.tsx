@@ -77,6 +77,14 @@ function SettingsSheet() {
     if ("ok" in result) {
       toast.success("API key saved successfully");
       setApiKey("");
+    } else if (
+      result.err.toLowerCase().includes("backend admin registration")
+    ) {
+      toast.error(result.err, {
+        duration: 10000,
+        description:
+          "Your principal is recognised as admin on the frontend, but the canister needs to be redeployed to register it on the backend.",
+      });
     } else {
       toast.error(`Failed to save API key: ${result.err}`);
     }

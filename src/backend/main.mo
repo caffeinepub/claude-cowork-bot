@@ -1,15 +1,46 @@
 import Map "mo:core/Map";
 import Principal "mo:core/Principal";
 import Text "mo:core/Text";
-import Error "mo:core/Error";
-import AccessControl "./authorization/access-control";
-import MixinAuthorization "./authorization/MixinAuthorization";
+import Runtime "mo:core/Runtime";
 import Outcall "./http-outcalls/outcall";
+import MixinAuthorization "authorization/MixinAuthorization";
+import AccessControl "authorization/access-control";
 
 actor {
-  let accessControlState : AccessControl.AccessControlState = AccessControl.initState();
+  // Initialize the access control system
+  let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
+  // User profile type
+  public type UserProfile = {
+    name : Text;
+  };
+
+  let userProfiles = Map.empty<Principal, UserProfile>();
+
+  // User profile management functions
+  public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view profiles");
+    };
+    userProfiles.get(caller);
+  };
+
+  public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
+    if (caller != user and not isAdminInternal(caller)) {
+      Runtime.trap("Unauthorized: Can only view your own profile");
+    };
+    userProfiles.get(user);
+  };
+
+  public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can save profiles");
+    };
+    userProfiles.add(caller, profile);
+  };
+
+  // Claude Cowork Bot functionality
   type Message = {
     role : Text;
     content : Text;
@@ -22,8 +53,18 @@ actor {
     Outcall.transform(input);
   };
 
+  // Hardcoded admin check - always returns true for the four specified principals
+  func isAdminInternal(caller : Principal) : Bool {
+    let callerText = caller.toText();
+    callerText == "qhzth-islcf-hba7y-q4gl3-n6vsh-cvp54-khis5-3qcsi-dv6hz-44mcd-xae" or
+    callerText == "wnhau-de23g-57rge-d7lv6-fnzxf-hvkpf-ua53k-mfzgw-flp7b-2voe2-lqe" or
+    callerText == "qqo3r-gvrky-iiz2l-23uu5-im2b4-omnu7-ch65g-sqjho-vak5f-cd42y-iae" or
+    callerText == "f7ttf-mk7fq-uljq2-feawb-uaaps-6ddxo-hvyby-jttw2-5oi6f-pftnc-iqe";
+  };
+
   public shared ({ caller }) func setApiKey(key : Text) : async { #ok; #err : Text } {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    // Hardcoded admin check takes precedence
+    if (not isAdminInternal(caller)) {
       return #err("Unauthorized: Only admins can set the API key");
     };
     apiKey := key;
@@ -31,13 +72,19 @@ actor {
   };
 
   public query ({ caller }) func getApiKeyStatus() : async Text {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
+    // Hardcoded admin check takes precedence
+    if (not isAdminInternal(caller)) {
       return "unauthorized";
     };
     if (apiKey == "") { "not_set" } else { "set" };
   };
 
   public shared ({ caller }) func sendMessage(userMessage : Text) : async { #ok : Text; #err : Text } {
+    // Require at least user-level permission
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return #err("Unauthorized: Only authenticated users can send messages");
+    };
+    
     if (apiKey == "") {
       return #err("API key not configured. Please set your Anthropic API key in Settings.");
     };
@@ -78,6 +125,10 @@ actor {
   };
 
   public query ({ caller }) func getHistory() : async [Message] {
+    // Require at least user-level permission
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can view history");
+    };
     switch (conversationHistory.get(caller)) {
       case (?h) { h };
       case (null) { [] };
@@ -85,6 +136,10 @@ actor {
   };
 
   public shared ({ caller }) func clearHistory() : async () {
+    // Require at least user-level permission
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can clear history");
+    };
     conversationHistory.remove(caller);
   };
 

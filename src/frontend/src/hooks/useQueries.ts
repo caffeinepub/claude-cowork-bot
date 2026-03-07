@@ -8,8 +8,12 @@ export type Message = {
   content: string;
 };
 
-const ADMIN_PRINCIPAL =
-  "qhzth-islcf-hba7y-q4gl3-n6vsh-cvp54-khis5-3qcsi-dv6hz-44mcd-xae";
+const ADMIN_PRINCIPALS = new Set([
+  "qhzth-islcf-hba7y-q4gl3-n6vsh-cvp54-khis5-3qcsi-dv6hz-44mcd-xae",
+  "wnhau-de23g-57rge-d7lv6-fnzxf-hvkpf-ua53k-mfzgw-flp7b-2voe2-lqe",
+  "qqo3r-gvrky-iiz2l-23uu5-im2b4-omnu7-ch65g-sqjho-vak5f-cd42y-iae",
+  "f7ttf-mk7fq-uljq2-feawb-uaaps-6ddxo-hvyby-jttw2-5oi6f-pftnc-iqe",
+]);
 
 export function useGetHistory() {
   const { actor, isFetching } = useActor();
@@ -26,10 +30,10 @@ export function useGetHistory() {
 
 export function useIsAdmin() {
   const { identity } = useInternetIdentity();
-  const data = useMemo(
-    () => identity?.getPrincipal().toText() === ADMIN_PRINCIPAL,
-    [identity],
-  );
+  const data = useMemo(() => {
+    const principal = identity?.getPrincipal().toText();
+    return principal ? ADMIN_PRINCIPALS.has(principal) : false;
+  }, [identity]);
   return { data };
 }
 
@@ -76,10 +80,22 @@ export function useSetApiKey() {
   return useMutation<{ ok: null } | { err: string }, Error, string>({
     mutationFn: async (key: string) => {
       if (!actor) throw new Error("Not connected");
-      return actor.setApiKey(key);
+      const result = await actor.setApiKey(key);
+      // Surface a clear, actionable error when the backend rejects due to admin registration
+      if (
+        "err" in result &&
+        result.err.toLowerCase().includes("unauthorized")
+      ) {
+        return {
+          err: "Backend admin registration required. Your principal is in the admin list but the canister does not recognise it yet. Please redeploy the app to fix this permanently.",
+        };
+      }
+      return result;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["apiKeyStatus"] });
+    onSuccess: (result) => {
+      if ("ok" in result) {
+        queryClient.invalidateQueries({ queryKey: ["apiKeyStatus"] });
+      }
     },
   });
 }

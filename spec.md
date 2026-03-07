@@ -1,22 +1,21 @@
 # Claude Cowork Bot
 
 ## Current State
-The app has a role-based access control system where the first caller becomes admin. This is fragile across deployments. The user's principal `qhzth-islcf-hba7y-q4gl3-n6vsh-cvp54-khis5-3qcsi-dv6hz-44mcd-xae` is not recognised as admin because a system call claimed the admin slot first.
+A personal Claude-powered chatbot running on ICP. The backend uses a "first caller becomes admin" pattern via `access-control.mo`. The frontend hardcodes admin principals in `useQueries.ts`. Currently three principals are in the admin list. The backend `isAdmin` check only looks at the dynamic role map, not the hardcoded list, so new principals added to the frontend list are not recognised by the backend.
 
 ## Requested Changes (Diff)
 
 ### Add
-- Hardcoded permanent admin principal in the backend so the user is always admin regardless of deployment order
+- Principal `f7ttf-mk7fq-uljq2-feawb-uaaps-6ddxo-hvyby-jttw2-5oi6f-pftnc-iqe` to the admin list in both frontend and backend.
 
 ### Modify
-- `main.mo`: Replace dynamic `AccessControl.isAdmin` checks with a direct principal comparison against the hardcoded admin principal
-- `access-control.mo`: No changes needed; the hardcode will be done at the main.mo level
+- `useQueries.ts` ADMIN_PRINCIPALS set: add the new principal (already done).
+- Backend `isAdmin` logic: must recognise all four hardcoded principals without relying solely on the dynamic role map. The backend should check a hardcoded list of admin principals before falling back to the role map.
 
 ### Remove
-- Dependency on "first caller" admin assignment for the hardcoded admin
+- Nothing removed.
 
 ## Implementation Plan
-1. Add a constant `ADMIN_PRINCIPAL` in `main.mo` set to `qhzth-islcf-hba7y-q4gl3-n6vsh-cvp54-khis5-3qcsi-dv6hz-44mcd-xae`
-2. Replace `AccessControl.isAdmin(accessControlState, caller)` checks in `setApiKey` and `getApiKeyStatus` with `caller == ADMIN_PRINCIPAL`
-3. Add a `isAdmin` public query in `main.mo` that returns `caller == ADMIN_PRINCIPAL`
-4. No frontend changes needed -- the `useIsAdmin` hook already calls the backend `isAdmin` query
+1. Regenerate backend Motoko with updated admin principal list (four principals total), where `isAdmin` checks a hardcoded array of principals first.
+2. Frontend `useQueries.ts` already updated with the new principal.
+3. Validate and deploy.
