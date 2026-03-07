@@ -1,0 +1,51 @@
+type http_request_result = 
+ record {
+   body: blob;
+   headers: vec http_header;
+   status: nat;
+ };
+type http_header = 
+ record {
+   name: text;
+   value: text;
+ };
+type UserRole = 
+ variant {
+   admin;
+   guest;
+   user;
+ };
+type TransformationOutput = 
+ record {
+   body: blob;
+   headers: vec http_header;
+   status: nat;
+ };
+type TransformationInput = 
+ record {
+   context: blob;
+   response: http_request_result;
+ };
+type Message = 
+ record {
+   content: text;
+   role: text;
+ };
+service : {
+  _initializeAccessControlWithSecret: (userSecret: text) -> ();
+  assignCallerUserRole: (user: principal, role: UserRole) -> ();
+  clearHistory: () -> ();
+  getApiKeyStatus: () -> (text) query;
+  getCallerUserRole: () -> (UserRole) query;
+  getHistory: () -> (vec Message) query;
+  isCallerAdmin: () -> (bool) query;
+  sendMessage: (userMessage: text) -> (variant {
+                                         err: text;
+                                         ok: text;
+                                       });
+  setApiKey: (key: text) -> (variant {
+                               err: text;
+                               ok;
+                             });
+  transform: (input: TransformationInput) -> (TransformationOutput) query;
+}
