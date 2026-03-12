@@ -7,11 +7,25 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
@@ -20,14 +34,18 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
+
 import { Toaster } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import {
   AlertCircle,
   Bot,
+  Brain,
   Bug,
   CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Download,
   Eye,
   EyeOff,
   Key,
@@ -35,6 +53,9 @@ import {
   LogIn,
   LogOut,
   MessageSquare,
+  MoreHorizontal,
+  Pencil,
+  Plus,
   Send,
   Settings,
   Trash2,
@@ -52,16 +73,37 @@ import { toast } from "sonner";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import {
   type Message,
+  type Thread,
+  loadActiveThreadId,
+  loadMemory,
+  loadMessages,
+  loadSystemPrompt,
+  loadThreads,
+  saveActiveThreadId,
+  saveMemoryLocal,
+  saveMessages,
+  saveSystemPromptLocal,
+  saveThreads,
   useClearHistory,
   useGetApiKeyStatus,
-  useGetHistory,
   useIsAdmin,
   useSendMessage,
   useSetApiKey,
 } from "./hooks/useQueries";
 
+// ---- Thread helpers ----
+function createThread(name: string): Thread {
+  return { id: `thread_${Date.now()}`, name, createdAt: Date.now() };
+}
+
 // ---- Settings Sheet ----
-function SettingsSheet() {
+function SettingsSheet({
+  activeThreadId,
+  onClearCurrentThread,
+}: {
+  activeThreadId: string | null;
+  onClearCurrentThread: () => void;
+}) {
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const { data: isAdmin } = useIsAdmin();
@@ -71,20 +113,19 @@ function SettingsSheet() {
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const { identity } = useInternetIdentity();
 
+  const [systemPrompt, setSystemPrompt] = useState(loadSystemPrompt);
+  const [memory, setMemory] = useState(loadMemory);
+  const [savingSP, setSavingSP] = useState(false);
+  const [savingMem, setSavingMem] = useState(false);
+
   const handleSaveKey = async () => {
     if (!apiKey.trim()) return;
     const result = await setApiKeyMutation.mutateAsync(apiKey.trim());
     if ("ok" in result) {
-      toast.success("API key saved successfully");
+      toast.success("Your API key saved");
       setApiKey("");
-    } else if (
-      result.err.toLowerCase().includes("backend admin registration")
-    ) {
-      toast.error(result.err, {
-        duration: 10000,
-        description:
-          "Your principal is recognised as admin on the frontend, but the canister needs to be redeployed to register it on the backend.",
-      });
+    } else if (result.err.toLowerCase().includes("backend admin")) {
+      toast.error(result.err, { duration: 10000 });
     } else {
       toast.error(`Failed to save API key: ${result.err}`);
     }
@@ -92,8 +133,30 @@ function SettingsSheet() {
 
   const handleClearHistory = async () => {
     await clearHistoryMutation.mutateAsync();
+    if (activeThreadId) {
+      saveMessages(activeThreadId, []);
+    }
+    onClearCurrentThread();
     toast.success("Conversation history cleared");
     setClearConfirmOpen(false);
+  };
+
+  const handleSaveSystemPrompt = async () => {
+    setSavingSP(true);
+    saveSystemPromptLocal(systemPrompt);
+    setTimeout(() => {
+      setSavingSP(false);
+      toast.success("System prompt saved");
+    }, 300);
+  };
+
+  const handleSaveMemory = async () => {
+    setSavingMem(true);
+    saveMemoryLocal(memory);
+    setTimeout(() => {
+      setSavingMem(false);
+      toast.success("Memory saved");
+    }, 300);
   };
 
   const keyStatusDisplay = () => {
@@ -123,7 +186,7 @@ function SettingsSheet() {
           variant="ghost"
           size="icon"
           data-ocid="settings.open_modal_button"
-          className="h-9 w-9 text-muted-foreground hover:text-foreground transition-colors"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground transition-colors"
           aria-label="Open settings"
         >
           <Settings className="h-4 w-4" />
@@ -131,7 +194,7 @@ function SettingsSheet() {
       </SheetTrigger>
       <SheetContent
         data-ocid="settings.sheet"
-        className="w-[340px] sm:w-[400px] bg-card border-border"
+        className="w-[340px] sm:w-[420px] bg-card border-border overflow-y-auto"
       >
         <SheetHeader className="mb-6">
           <SheetTitle className="font-mono text-foreground flex items-center gap-2">
@@ -140,78 +203,151 @@ function SettingsSheet() {
           </SheetTitle>
         </SheetHeader>
 
-        <div className="space-y-8">
+        <div className="space-y-8 pb-8">
           {/* API Key Section */}
-          {isAdmin && (
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Key className="h-3.5 w-3.5 text-primary" />
-                  Anthropic API Key
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Your key is stored securely in the canister and only used for
-                  API calls.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">
-                    Current status
-                  </span>
-                  {keyStatusDisplay()}
-                </div>
-
-                <div className="relative">
-                  <Input
-                    data-ocid="settings.input"
-                    type={showKey ? "text" : "password"}
-                    placeholder="sk-ant-api03-..."
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    className="pr-10 font-mono text-sm bg-background border-border focus-visible:ring-primary/50"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKey(!showKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label={showKey ? "Hide key" : "Show key"}
-                  >
-                    {showKey ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-
-                <Button
-                  data-ocid="settings.save_button"
-                  onClick={handleSaveKey}
-                  disabled={!apiKey.trim() || setApiKeyMutation.isPending}
-                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-mono text-sm"
-                >
-                  {setApiKeyMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : null}
-                  {setApiKeyMutation.isPending ? "Saving..." : "Save API Key"}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {isAdmin && <Separator className="bg-border" />}
-
-          {/* Conversation Section */}
           <div className="space-y-4">
             <div className="space-y-1">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                <Key className="h-3.5 w-3.5 text-primary" />
+                Anthropic API Key
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Your key is stored securely in the canister.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">
+                  Current status
+                </span>
+                {keyStatusDisplay()}
+              </div>
+              <div className="relative">
+                <Input
+                  data-ocid="settings.input"
+                  type={showKey ? "text" : "password"}
+                  placeholder="sk-ant-api03-..."
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  className="pr-10 font-mono text-sm bg-background border-border focus-visible:ring-primary/50"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={showKey ? "Hide key" : "Show key"}
+                >
+                  {showKey ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              <Button
+                data-ocid="settings.save_button"
+                onClick={handleSaveKey}
+                disabled={!apiKey.trim() || setApiKeyMutation.isPending}
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-mono text-sm"
+              >
+                {setApiKeyMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                {setApiKeyMutation.isPending ? "Saving..." : "Save API Key"}
+              </Button>
+            </div>
+          </div>
+
+          {/* System Prompt Section */}
+          {isAdmin && (
+            <>
+              <Separator className="bg-border" />
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                    System Prompt
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Custom instructions given to Claude on every message.
+                  </p>
+                </div>
+                <Textarea
+                  data-ocid="settings.textarea"
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  placeholder="You are a helpful assistant..."
+                  rows={4}
+                  className="text-sm bg-background border-border resize-none focus-visible:ring-primary/50 font-mono"
+                />
+                <Button
+                  data-ocid="settings.system_prompt.save_button"
+                  onClick={handleSaveSystemPrompt}
+                  disabled={savingSP}
+                  size="sm"
+                  className="w-full bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 font-mono text-xs"
+                  variant="outline"
+                >
+                  {savingSP ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  ) : null}
+                  {savingSP ? "Saving..." : "Save System Prompt"}
+                </Button>
+              </div>
+            </>
+          )}
+
+          {/* Memory Section */}
+          {isAdmin && (
+            <>
+              <Separator className="bg-border" />
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Brain className="h-3.5 w-3.5 text-primary" />
+                    Persistent Memory
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Key facts about you — included in every conversation for
+                    context.
+                  </p>
+                </div>
+                <Textarea
+                  data-ocid="settings.memory.textarea"
+                  value={memory}
+                  onChange={(e) => setMemory(e.target.value)}
+                  placeholder="My name is..., I work on..., I prefer concise responses..."
+                  rows={4}
+                  className="text-sm bg-background border-border resize-none focus-visible:ring-primary/50 font-body"
+                />
+                <Button
+                  data-ocid="settings.memory.save_button"
+                  onClick={handleSaveMemory}
+                  disabled={savingMem}
+                  size="sm"
+                  className="w-full bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 font-mono text-xs"
+                  variant="outline"
+                >
+                  {savingMem ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  ) : null}
+                  {savingMem ? "Saving..." : "Save Memory"}
+                </Button>
+              </div>
+            </>
+          )}
+
+          <Separator className="bg-border" />
+
+          {/* Conversation Section */}
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Trash2 className="h-3.5 w-3.5 text-primary" />
                 Conversation
               </h3>
               <p className="text-xs text-muted-foreground">
-                Manage your conversation history stored on-chain.
+                Clear current thread history.
               </p>
             </div>
 
@@ -219,27 +355,26 @@ function SettingsSheet() {
               open={clearConfirmOpen}
               onOpenChange={setClearConfirmOpen}
             >
-              <AlertDialogTrigger asChild>
-                <Button
-                  data-ocid="chat.clear_button"
-                  variant="destructive"
-                  className="w-full font-mono text-sm"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Clear Conversation History
-                </Button>
-              </AlertDialogTrigger>
+              <Button
+                data-ocid="chat.clear_button"
+                variant="destructive"
+                className="w-full font-mono text-sm"
+                onClick={() => setClearConfirmOpen(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear Thread History
+              </Button>
               <AlertDialogContent
                 data-ocid="chat.dialog"
                 className="bg-card border-border"
               >
                 <AlertDialogHeader>
                   <AlertDialogTitle className="font-mono text-foreground">
-                    Clear all messages?
+                    Clear thread history?
                   </AlertDialogTitle>
                   <AlertDialogDescription className="text-muted-foreground">
-                    This will permanently delete your entire conversation
-                    history from the canister. This action cannot be undone.
+                    This will permanently delete the conversation history for
+                    this thread.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -275,7 +410,6 @@ function SettingsSheet() {
               Debug Info
             </h3>
             <div className="rounded-lg bg-muted/40 border border-border/60 p-3 space-y-2">
-              {/* Login status */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground font-mono">
                   Login status
@@ -286,7 +420,6 @@ function SettingsSheet() {
                   {identity ? "Logged in" : "Not logged in"}
                 </span>
               </div>
-              {/* Admin status */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground font-mono">
                   Admin status
@@ -297,7 +430,6 @@ function SettingsSheet() {
                   {isAdmin ? "Admin" : "Not admin"}
                 </span>
               </div>
-              {/* API key status */}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground font-mono">
                   API key status
@@ -306,12 +438,11 @@ function SettingsSheet() {
                   {statusLoading ? "loading..." : (keyStatus ?? "undefined")}
                 </span>
               </div>
-              {/* Principal */}
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground font-mono">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-xs text-muted-foreground font-mono shrink-0">
                   Principal
                 </span>
-                <span className="text-xs font-mono text-foreground/70 break-all text-right max-w-[220px]">
+                <span className="text-xs font-mono text-foreground/70 break-all text-right">
                   {identity ? identity.getPrincipal().toText() : "Anonymous"}
                 </span>
               </div>
@@ -351,22 +482,16 @@ function TypingIndicator() {
 function MessageBubble({
   message,
   index,
-}: {
-  message: Message;
-  index: number;
-}) {
+}: { message: Message; index: number }) {
   const isUser = message.role === "user";
-  const ocid = `chat.item.${index + 1}`;
-
   return (
     <motion.div
-      data-ocid={ocid}
+      data-ocid={`chat.item.${index + 1}`}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
+      transition={{ duration: 0.22, ease: "easeOut" }}
       className={`flex items-start gap-3 px-4 py-2 ${isUser ? "flex-row-reverse" : "flex-row"}`}
     >
-      {/* Avatar */}
       <div
         className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
           isUser
@@ -380,10 +505,8 @@ function MessageBubble({
           <Bot className="h-3.5 w-3.5 text-primary" />
         )}
       </div>
-
-      {/* Bubble */}
       <div
-        className={`max-w-[75%] space-y-1 ${isUser ? "items-end" : "items-start"} flex flex-col`}
+        className={`max-w-[75%] space-y-1 flex flex-col ${isUser ? "items-end" : "items-start"}`}
       >
         {!isUser && (
           <span className="text-[10px] font-mono text-primary/70 px-1">
@@ -418,26 +541,26 @@ function EmptyState() {
         <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center animate-pulse-glow">
           <span className="text-3xl">🤖</span>
         </div>
-        <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary/80 animate-pulse" />
+        <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-primary/80 animate-pulse" />
       </div>
       <div className="space-y-2">
         <p className="font-mono text-foreground/80 text-base font-medium">
-          Start a conversation below
+          Start a conversation
         </p>
         <p className="text-muted-foreground text-sm max-w-xs">
-          Ask Claude anything — it runs on the Internet Computer, with your
-          conversation history stored on-chain.
+          Ask Claude anything — responses run via HTTP outcalls on the Internet
+          Computer.
         </p>
       </div>
       <div className="flex gap-2 flex-wrap justify-center">
         {["Explain ICP canisters", "Help debug code", "Write an email"].map(
-          (suggestion) => (
+          (s) => (
             <Badge
-              key={suggestion}
+              key={s}
               variant="outline"
               className="text-xs border-border text-muted-foreground font-mono cursor-default hover:border-primary/40 transition-colors"
             >
-              {suggestion}
+              {s}
             </Badge>
           ),
         )}
@@ -450,11 +573,9 @@ function EmptyState() {
 function LoginPrompt({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 py-6 px-4">
-      <div className="text-center space-y-1">
-        <p className="text-sm text-muted-foreground font-mono">
-          Login to start chatting
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground font-mono">
+        Login to start chatting
+      </p>
       <Button
         onClick={onLogin}
         className="bg-primary text-primary-foreground hover:bg-primary/90 font-mono text-sm gap-2"
@@ -466,39 +587,449 @@ function LoginPrompt({ onLogin }: { onLogin: () => void }) {
   );
 }
 
+// ---- Thread Sidebar ----
+function ThreadSidebar({
+  threads,
+  activeThreadId,
+  onSelectThread,
+  onCreateThread,
+  onRenameThread,
+  onDeleteThread,
+  collapsed,
+  onToggleCollapse,
+}: {
+  threads: Thread[];
+  activeThreadId: string | null;
+  onSelectThread: (id: string) => void;
+  onCreateThread: () => void;
+  onRenameThread: (id: string, name: string) => void;
+  onDeleteThread: (id: string) => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const startRename = (thread: Thread) => {
+    setRenamingId(thread.id);
+    setRenameValue(thread.name);
+  };
+
+  const commitRename = () => {
+    if (renamingId && renameValue.trim()) {
+      onRenameThread(renamingId, renameValue.trim());
+    }
+    setRenamingId(null);
+  };
+
+  return (
+    <>
+      <motion.aside
+        data-ocid="threads.panel"
+        animate={{ width: collapsed ? 0 : 220 }}
+        transition={{ duration: 0.2, ease: "easeInOut" }}
+        className="flex-none overflow-hidden bg-sidebar border-r border-sidebar-border flex flex-col h-full"
+      >
+        <div className="flex items-center justify-between px-3 h-14 border-b border-sidebar-border flex-none">
+          <span className="font-mono text-xs font-semibold text-sidebar-foreground/70 uppercase tracking-widest">
+            Threads
+          </span>
+          <Button
+            data-ocid="threads.add_button"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-sidebar-foreground/60 hover:text-primary hover:bg-primary/10 transition-colors"
+            onClick={onCreateThread}
+            aria-label="New thread"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        <ScrollArea className="flex-1">
+          <div className="p-2 space-y-0.5">
+            {threads.map((thread, idx) => (
+              <button
+                type="button"
+                key={thread.id}
+                data-ocid={`threads.item.${idx + 1}`}
+                className={`w-full group flex items-center gap-1.5 rounded-lg px-2.5 py-2 cursor-pointer transition-all ${
+                  activeThreadId === thread.id
+                    ? "bg-primary/10 text-primary border-l-2 border-primary shadow-glow-sm"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground border-l-2 border-transparent"
+                }`}
+                onClick={() => onSelectThread(thread.id)}
+              >
+                <MessageSquare className="h-3.5 w-3.5 flex-shrink-0 opacity-60" />
+                <span className="flex-1 text-xs font-mono truncate">
+                  {thread.name}
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      data-ocid={`threads.dropdown_menu.${idx + 1}`}
+                      className="opacity-0 group-hover:opacity-100 focus:opacity-100 h-5 w-5 flex items-center justify-center rounded hover:bg-primary/20 transition-all"
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="Thread options"
+                    >
+                      <MoreHorizontal className="h-3 w-3" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    data-ocid="threads.dropdown_menu"
+                    align="end"
+                    className="bg-popover border-border min-w-[120px]"
+                  >
+                    <DropdownMenuItem
+                      data-ocid={`threads.edit_button.${idx + 1}`}
+                      className="text-xs font-mono gap-2 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startRename(thread);
+                      }}
+                    >
+                      <Pencil className="h-3 w-3" />
+                      Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      data-ocid={`threads.delete_button.${idx + 1}`}
+                      className="text-xs font-mono gap-2 text-destructive focus:text-destructive cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirmId(thread.id);
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </button>
+            ))}
+            {threads.length === 0 && (
+              <div
+                data-ocid="threads.empty_state"
+                className="px-2 py-4 text-center"
+              >
+                <p className="text-xs text-muted-foreground font-mono">
+                  No threads yet
+                </p>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </motion.aside>
+
+      {/* Collapse toggle */}
+      <button
+        type="button"
+        data-ocid="threads.toggle"
+        onClick={onToggleCollapse}
+        className="flex-none w-4 bg-sidebar border-r border-sidebar-border hover:bg-primary/10 transition-colors flex items-center justify-center group cursor-col-resize"
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground">
+          {collapsed ? (
+            <ChevronRight className="h-3 w-3" />
+          ) : (
+            <ChevronLeft className="h-3 w-3" />
+          )}
+        </div>
+      </button>
+
+      {/* Rename dialog */}
+      <Dialog
+        open={!!renamingId}
+        onOpenChange={(open) => !open && setRenamingId(null)}
+      >
+        <DialogContent
+          data-ocid="threads.dialog"
+          className="bg-card border-border sm:max-w-sm"
+        >
+          <DialogHeader>
+            <DialogTitle className="font-mono text-foreground">
+              Rename Thread
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <Label className="text-xs text-muted-foreground font-mono">
+              Thread name
+            </Label>
+            <Input
+              data-ocid="threads.input"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && commitRename()}
+              className="mt-1.5 bg-background border-border font-mono text-sm focus-visible:ring-primary/50"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              data-ocid="threads.cancel_button"
+              variant="outline"
+              size="sm"
+              className="font-mono text-xs"
+              onClick={() => setRenamingId(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              data-ocid="threads.confirm_button"
+              size="sm"
+              className="font-mono text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={commitRename}
+            >
+              Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm dialog */}
+      <AlertDialog
+        open={!!deleteConfirmId}
+        onOpenChange={(open) => !open && setDeleteConfirmId(null)}
+      >
+        <AlertDialogContent
+          data-ocid="threads.delete.dialog"
+          className="bg-card border-border"
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-mono text-foreground">
+              Delete thread?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              This will permanently delete the thread and all its messages.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              data-ocid="threads.delete.cancel_button"
+              className="font-mono bg-secondary border-border hover:bg-accent"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-ocid="threads.delete.confirm_button"
+              onClick={() => {
+                if (deleteConfirmId) onDeleteThread(deleteConfirmId);
+                setDeleteConfirmId(null);
+              }}
+              className="font-mono bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+// ---- New Thread Dialog ----
+function NewThreadDialog({
+  open,
+  onOpenChange,
+  onCreate,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreate: (name: string) => void;
+}) {
+  const [name, setName] = useState("");
+
+  const handleCreate = () => {
+    if (!name.trim()) return;
+    onCreate(name.trim());
+    setName("");
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) setName("");
+        onOpenChange(o);
+      }}
+    >
+      <DialogContent
+        data-ocid="threads.new.dialog"
+        className="bg-card border-border sm:max-w-sm"
+      >
+        <DialogHeader>
+          <DialogTitle className="font-mono text-foreground">
+            New Thread
+          </DialogTitle>
+        </DialogHeader>
+        <div className="py-2">
+          <Label className="text-xs text-muted-foreground font-mono">
+            Thread name
+          </Label>
+          <Input
+            data-ocid="threads.new.input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+            placeholder="e.g. Project A, Blog ideas..."
+            className="mt-1.5 bg-background border-border font-mono text-sm focus-visible:ring-primary/50"
+            autoFocus
+          />
+        </div>
+        <DialogFooter>
+          <Button
+            data-ocid="threads.new.cancel_button"
+            variant="outline"
+            size="sm"
+            className="font-mono text-xs"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            data-ocid="threads.new.confirm_button"
+            size="sm"
+            disabled={!name.trim()}
+            className="font-mono text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+            onClick={handleCreate}
+          >
+            Create
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---- Export helper ----
+function exportThread(thread: Thread, messages: Message[]) {
+  const date = new Date().toISOString().split("T")[0];
+  const filename = `${thread.name.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-${date}.md`;
+  const content = [
+    `# ${thread.name}`,
+    "",
+    ...messages.map((m) =>
+      m.role === "user" ? `**You:** ${m.content}` : `**Claude:** ${m.content}`,
+    ),
+  ].join("\n\n");
+  const blob = new Blob([content], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ---- Main App ----
 export default function App() {
   const { identity, login, clear, isInitializing, isLoggingIn } =
     useInternetIdentity();
   const isLoggedIn = !!identity;
 
-  const { data: history = [], isLoading: historyLoading } = useGetHistory();
   const sendMessageMutation = useSendMessage();
+  const clearHistoryMutation = useClearHistory();
 
-  const [inputValue, setInputValue] = useState("");
-  const [localMessages, setLocalMessages] = useState<Message[]>([]);
+  // Thread state
+  const [threads, setThreads] = useState<Thread[]>(() => loadThreads());
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(() =>
+    loadActiveThreadId(),
+  );
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [newThreadDialogOpen, setNewThreadDialogOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // Sync backend history to local messages
+  // Initialize: ensure at least a General thread exists
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run once on mount
   useEffect(() => {
-    if (!historyLoading) {
-      setLocalMessages(history);
+    if (threads.length === 0) {
+      const general = createThread("General");
+      const updated = [general];
+      setThreads(updated);
+      saveThreads(updated);
+      setActiveThreadId(general.id);
+      saveActiveThreadId(general.id);
+    } else if (
+      !activeThreadId ||
+      !threads.find((t) => t.id === activeThreadId)
+    ) {
+      const first = threads[0];
+      setActiveThreadId(first.id);
+      saveActiveThreadId(first.id);
     }
-  }, [history, historyLoading]);
+  }, []);
 
-  // Auto-scroll to bottom
+  // Load messages when active thread changes
+  useEffect(() => {
+    if (activeThreadId) {
+      setMessages(loadMessages(activeThreadId));
+    }
+  }, [activeThreadId]);
+
+  // Auto-scroll
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll whenever messages or sending state changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on message/send changes
   useEffect(() => {
     scrollToBottom();
-  }, [localMessages, isSending, scrollToBottom]);
+  }, [messages, isSending, scrollToBottom]);
+
+  // Thread management
+  const handleCreateThread = (name: string) => {
+    const thread = createThread(name);
+    const updated = [...threads, thread];
+    setThreads(updated);
+    saveThreads(updated);
+    setActiveThreadId(thread.id);
+    saveActiveThreadId(thread.id);
+    setMessages([]);
+    clearHistoryMutation.mutate();
+  };
+
+  const handleSelectThread = (id: string) => {
+    if (id === activeThreadId) return;
+    setActiveThreadId(id);
+    saveActiveThreadId(id);
+    clearHistoryMutation.mutate();
+  };
+
+  const handleRenameThread = (id: string, name: string) => {
+    const updated = threads.map((t) => (t.id === id ? { ...t, name } : t));
+    setThreads(updated);
+    saveThreads(updated);
+  };
+
+  const handleDeleteThread = (id: string) => {
+    const updated = threads.filter((t) => t.id !== id);
+    setThreads(updated);
+    saveThreads(updated);
+    localStorage.removeItem(`ccbot_messages_${id}`);
+    if (activeThreadId === id) {
+      const next = updated[0] ?? null;
+      setActiveThreadId(next?.id ?? null);
+      if (next) {
+        saveActiveThreadId(next.id);
+        setMessages(loadMessages(next.id));
+        clearHistoryMutation.mutate();
+      } else {
+        setMessages([]);
+      }
+    }
+  };
+
+  const handleClearCurrentThread = () => {
+    setMessages([]);
+  };
 
   // Auto-grow textarea
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -510,14 +1041,14 @@ export default function App() {
 
   const handleSend = async () => {
     const trimmed = inputValue.trim();
-    if (!trimmed || isSending) return;
+    if (!trimmed || isSending || !activeThreadId) return;
 
-    const userMessage: Message = { role: "user", content: trimmed };
-    setLocalMessages((prev) => [...prev, userMessage]);
+    const userMsg: Message = { role: "user", content: trimmed };
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
     setInputValue("");
     setIsSending(true);
 
-    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
@@ -525,33 +1056,27 @@ export default function App() {
     try {
       const result = await sendMessageMutation.mutateAsync(trimmed);
       if ("ok" in result) {
-        const assistantMessage: Message = {
-          role: "assistant",
-          content: result.ok,
-        };
-        setLocalMessages((prev) => [...prev, assistantMessage]);
+        const assistantMsg: Message = { role: "assistant", content: result.ok };
+        const finalMessages = [...updatedMessages, assistantMsg];
+        setMessages(finalMessages);
+        saveMessages(activeThreadId, finalMessages);
       } else {
         const errMsg = result.err;
-        // Show helpful message if API key is missing
         if (
           errMsg.toLowerCase().includes("api key") ||
           errMsg.toLowerCase().includes("not set")
         ) {
-          toast.error(
-            "Anthropic API key not configured. Ask an admin to set it in Settings.",
-            {
-              duration: 6000,
-            },
-          );
+          toast.error("Please set your Anthropic API key in Settings.", {
+            duration: 6000,
+          });
         } else {
           toast.error(`Error: ${errMsg}`);
         }
-        // Remove the optimistic user message on error
-        setLocalMessages((prev) => prev.slice(0, -1));
+        setMessages(messages);
       }
     } catch (_err) {
       toast.error("Failed to send message. Please try again.");
-      setLocalMessages((prev) => prev.slice(0, -1));
+      setMessages(messages);
     } finally {
       setIsSending(false);
     }
@@ -564,38 +1089,61 @@ export default function App() {
     }
   };
 
-  const hasMessages = localMessages.length > 0;
+  const activeThread = threads.find((t) => t.id === activeThreadId);
+  const hasMessages = messages.length > 0;
 
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Background grid */}
-      <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
+      <div className="fixed inset-0 bg-grid bg-scanlines opacity-50 pointer-events-none" />
 
       {/* Header */}
       <header className="relative z-10 flex-none border-b border-border bg-background/80 backdrop-blur-sm">
-        <div className="flex items-center justify-between px-4 h-14 max-w-4xl mx-auto">
-          {/* Logo / Name */}
+        <div className="flex items-center justify-between px-4 h-14">
+          {/* Logo */}
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center glow-magenta">
               <span className="text-base">🤖</span>
             </div>
-            <span className="font-mono font-semibold text-foreground text-sm tracking-tight">
+            <span className="font-mono font-semibold text-foreground text-sm tracking-tight glow-cyan-text glitch-text">
               Claude Cowork Bot
             </span>
             <Badge
               variant="outline"
-              className="text-[10px] font-mono border-primary/30 text-primary/70 hidden sm:flex"
+              className="text-[10px] font-mono border-primary/50 text-primary hidden sm:flex shadow-glow-sm"
             >
               ICP
             </Badge>
+            {activeThread && (
+              <span className="text-xs text-muted-foreground font-mono hidden md:block">
+                / {activeThread.name}
+              </span>
+            )}
           </div>
 
           {/* Right controls */}
           <div className="flex items-center gap-1">
-            {/* Settings — only when logged in */}
-            {isLoggedIn && <SettingsSheet />}
+            {/* Export button */}
+            {isLoggedIn && hasMessages && activeThread && (
+              <button
+                type="button"
+                data-ocid="chat.export_button"
+                onClick={() => exportThread(activeThread, messages)}
+                className="h-8 w-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                aria-label="Export conversation"
+                title="Export as Markdown"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            )}
 
-            {/* Auth button */}
+            {isLoggedIn && (
+              <SettingsSheet
+                activeThreadId={activeThreadId}
+                onClearCurrentThread={handleClearCurrentThread}
+              />
+            )}
+
             {isInitializing ? (
               <Button
                 variant="ghost"
@@ -636,88 +1184,93 @@ export default function App() {
         </div>
       </header>
 
-      {/* Chat Area */}
-      <main className="relative flex-1 overflow-hidden flex flex-col max-w-4xl mx-auto w-full">
-        {/* Messages */}
-        <div
-          ref={chatContainerRef}
-          className="flex-1 overflow-y-auto chat-scroll py-4"
-        >
-          {historyLoading ? (
-            /* Skeleton loading */
-            <div data-ocid="chat.loading_state" className="space-y-4 px-4 py-2">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className={`flex items-start gap-3 ${i % 2 === 0 ? "flex-row-reverse" : ""}`}
-                >
-                  <Skeleton className="w-7 h-7 rounded-full flex-shrink-0 bg-muted" />
-                  <Skeleton
-                    className="h-12 bg-muted rounded-2xl"
-                    style={{ width: `${40 + i * 15}%` }}
-                  />
-                </div>
-              ))}
-            </div>
-          ) : hasMessages ? (
-            /* Message list */
-            <div className="space-y-1">
-              <AnimatePresence initial={false}>
-                {localMessages.map((msg, idx) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: messages are append-only and have no stable IDs
-                  <MessageBubble key={idx} message={msg} index={idx} />
-                ))}
-              </AnimatePresence>
-              <AnimatePresence>
-                {isSending && <TypingIndicator />}
-              </AnimatePresence>
-            </div>
-          ) : (
-            <EmptyState />
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+      {/* Body: sidebar + chat */}
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* Thread sidebar (only when logged in) */}
+        {isLoggedIn && (
+          <ThreadSidebar
+            threads={threads}
+            activeThreadId={activeThreadId}
+            onSelectThread={handleSelectThread}
+            onCreateThread={() => setNewThreadDialogOpen(true)}
+            onRenameThread={handleRenameThread}
+            onDeleteThread={handleDeleteThread}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
+          />
+        )}
 
-        {/* Input Area */}
-        <div className="flex-none border-t border-border bg-background/90 backdrop-blur-sm">
-          {isLoggedIn ? (
-            <div className="px-4 py-3 max-w-4xl mx-auto">
-              <div className="flex items-end gap-2 bg-card border border-border rounded-xl px-3 py-2 focus-within:border-primary/50 transition-colors">
-                <Textarea
-                  ref={textareaRef}
-                  data-ocid="chat.input"
-                  value={inputValue}
-                  onChange={handleTextareaChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Ask Claude anything... (Enter to send, Shift+Enter for newline)"
-                  rows={1}
-                  className="flex-1 resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm placeholder:text-muted-foreground/60 min-h-[36px] max-h-[140px] py-1.5 font-body"
-                  style={{ height: "36px" }}
-                />
-                <Button
-                  data-ocid="chat.submit_button"
-                  onClick={handleSend}
-                  disabled={!inputValue.trim() || isSending}
-                  size="icon"
-                  className="flex-shrink-0 h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 rounded-lg transition-all"
-                  aria-label="Send message"
-                >
-                  {isSending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Send className="h-3.5 w-3.5" />
-                  )}
-                </Button>
+        {/* Chat main area */}
+        <main className="flex-1 overflow-hidden flex flex-col">
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto chat-scroll py-4">
+            {hasMessages ? (
+              <div className="space-y-1">
+                <AnimatePresence initial={false}>
+                  {messages.map((msg, idx) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: messages are append-only
+                    <MessageBubble key={idx} message={msg} index={idx} />
+                  ))}
+                </AnimatePresence>
+                <AnimatePresence>
+                  {isSending && <TypingIndicator />}
+                </AnimatePresence>
               </div>
-              <p className="text-[10px] text-muted-foreground/50 text-center mt-1.5 font-mono">
-                Conversation stored on-chain · Internet Computer
-              </p>
-            </div>
-          ) : (
-            <LoginPrompt onLogin={login} />
-          )}
-        </div>
-      </main>
+            ) : isSending ? (
+              <div className="space-y-1">
+                <AnimatePresence>
+                  {isSending && <TypingIndicator />}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <EmptyState />
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div className="flex-none border-t border-border bg-background/90 backdrop-blur-sm">
+            {isLoggedIn ? (
+              <div className="px-4 py-3">
+                <div className="flex items-end gap-2 bg-card border border-border rounded-xl px-3 py-2 focus-within:border-primary/50 transition-colors">
+                  <Textarea
+                    ref={textareaRef}
+                    data-ocid="chat.input"
+                    value={inputValue}
+                    onChange={handleTextareaChange}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Ask Claude anything... (Enter to send, Shift+Enter for newline)"
+                    rows={1}
+                    className="flex-1 resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm placeholder:text-muted-foreground/60 min-h-[36px] max-h-[140px] py-1.5 font-body"
+                    style={{ height: "36px" }}
+                  />
+                  <Button
+                    data-ocid="chat.submit_button"
+                    onClick={handleSend}
+                    disabled={
+                      !inputValue.trim() || isSending || !activeThreadId
+                    }
+                    size="icon"
+                    className="flex-shrink-0 h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-glow-sm disabled:opacity-40 rounded-lg transition-all"
+                    aria-label="Send message"
+                  >
+                    {isSending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Send className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-[10px] text-muted-foreground/50 text-center mt-1.5 font-mono">
+                  Conversation stored on-chain · Internet Computer
+                </p>
+              </div>
+            ) : (
+              <LoginPrompt onLogin={login} />
+            )}
+          </div>
+        </main>
+      </div>
 
       {/* Footer */}
       <footer className="relative z-10 flex-none border-t border-border bg-background/80 py-2.5 px-4">
@@ -733,6 +1286,12 @@ export default function App() {
           </a>
         </p>
       </footer>
+
+      <NewThreadDialog
+        open={newThreadDialogOpen}
+        onOpenChange={setNewThreadDialogOpen}
+        onCreate={handleCreateThread}
+      />
 
       <Toaster
         theme="dark"

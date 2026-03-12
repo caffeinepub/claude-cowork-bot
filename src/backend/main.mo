@@ -7,85 +7,148 @@ import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
 
 actor {
-  // Initialize the access control system
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
-  // User profile type
   public type UserProfile = {
     name : Text;
   };
 
   let userProfiles = Map.empty<Principal, UserProfile>();
 
-  // User profile management functions
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view profiles");
+      Runtime.trap("Unauthorized");
     };
     userProfiles.get(caller);
   };
 
   public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
     if (caller != user and not isAdminInternal(caller)) {
-      Runtime.trap("Unauthorized: Can only view your own profile");
+      Runtime.trap("Unauthorized");
     };
     userProfiles.get(user);
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
+      Runtime.trap("Unauthorized");
     };
     userProfiles.add(caller, profile);
   };
 
-  // Claude Cowork Bot functionality
+  // ---- Types ----
   type Message = {
     role : Text;
     content : Text;
   };
 
-  var apiKey : Text = "";
-  let conversationHistory : Map.Map<Principal, [Message]> = Map.empty();
+  // ---- State ----
+  var apiKey : Text = ""; // shared admin key (fallback)
+  var customSystemPrompt : Text = "";
+  var persistentMemory : Text = "";
 
+  let conversationHistory : Map.Map<Principal, [Message]> = Map.empty();
+  let userApiKeys : Map.Map<Principal, Text> = Map.empty(); // per-user keys
+
+  // ---- Helpers ----
   public query func transform(input : Outcall.TransformationInput) : async Outcall.TransformationOutput {
     Outcall.transform(input);
   };
 
-  // Hardcoded admin check - always returns true for the four specified principals
   func isAdminInternal(caller : Principal) : Bool {
-    let callerText = caller.toText();
-    callerText == "qhzth-islcf-hba7y-q4gl3-n6vsh-cvp54-khis5-3qcsi-dv6hz-44mcd-xae" or
-    callerText == "wnhau-de23g-57rge-d7lv6-fnzxf-hvkpf-ua53k-mfzgw-flp7b-2voe2-lqe" or
-    callerText == "qqo3r-gvrky-iiz2l-23uu5-im2b4-omnu7-ch65g-sqjho-vak5f-cd42y-iae" or
-    callerText == "f7ttf-mk7fq-uljq2-feawb-uaaps-6ddxo-hvyby-jttw2-5oi6f-pftnc-iqe";
+    let t = caller.toText();
+    t == "qhzth-islcf-hba7y-q4gl3-n6vsh-cvp54-khis5-3qcsi-dv6hz-44mcd-xae" or
+    t == "wnhau-de23g-57rge-d7lv6-fnzxf-hvkpf-ua53k-mfzgw-flp7b-2voe2-lqe" or
+    t == "qqo3r-gvrky-iiz2l-23uu5-im2b4-omnu7-ch65g-sqjho-vak5f-cd42y-iae" or
+    t == "f7ttf-mk7fq-uljq2-feawb-uaaps-6ddxo-hvyby-jttw2-5oi6f-pftnc-iqe";
   };
 
+  func buildSystemPrompt() : Text {
+    let base = if (customSystemPrompt == "") {
+      "You are a helpful cowork assistant. Help the user with their tasks, answer questions, and provide thoughtful guidance."
+    } else {
+      customSystemPrompt
+    };
+    if (persistentMemory == "") {
+      base
+    } else {
+      "User context: " # persistentMemory # "\n\n" # base
+    };
+  };
+
+  // ---- Shared Admin API Key (admin only) ----
   public shared ({ caller }) func setApiKey(key : Text) : async { #ok; #err : Text } {
-    // Hardcoded admin check takes precedence
     if (not isAdminInternal(caller)) {
-      return #err("Unauthorized: Only admins can set the API key");
+      return #err("Unauthorized: Only admins can set the shared API key");
     };
     apiKey := key;
     #ok;
   };
 
   public query ({ caller }) func getApiKeyStatus() : async Text {
-    // Hardcoded admin check takes precedence
-    if (not isAdminInternal(caller)) {
-      return "unauthorized";
-    };
+    if (not isAdminInternal(caller)) { return "unauthorized" };
     if (apiKey == "") { "not_set" } else { "set" };
   };
 
-  public shared ({ caller }) func sendMessage(userMessage : Text) : async { #ok : Text; #err : Text } {
-    // Require at least user-level permission
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      return #err("Unauthorized: Only authenticated users can send messages");
+  // ---- Per-User API Key ----
+  public shared ({ caller }) func setMyApiKey(key : Text) : async { #ok; #err : Text } {
+    if (caller.isAnonymous()) {
+      return #err("Unauthorized: Please log in to set your API key");
     };
-    
-    if (apiKey == "") {
+    userApiKeys.add(caller, key);
+    #ok;
+  };
+
+  public query ({ caller }) func getMyApiKeyStatus() : async Text {
+    if (caller.isAnonymous()) {
+      return "unauthorized";
+    };
+    switch (userApiKeys.get(caller)) {
+      case (?k) { if (k == "") { "not_set" } else { "set" } };
+      case (null) { "not_set" };
+    };
+  };
+
+  // ---- System Prompt ----
+  public shared ({ caller }) func setSystemPrompt(prompt : Text) : async { #ok; #err : Text } {
+    if (not isAdminInternal(caller)) {
+      return #err("Unauthorized");
+    };
+    customSystemPrompt := prompt;
+    #ok;
+  };
+
+  public query ({ caller }) func getSystemPrompt() : async Text {
+    if (not isAdminInternal(caller)) { return "" };
+    customSystemPrompt;
+  };
+
+  // ---- Persistent Memory ----
+  public shared ({ caller }) func setMemory(text : Text) : async { #ok; #err : Text } {
+    if (not isAdminInternal(caller)) {
+      return #err("Unauthorized");
+    };
+    persistentMemory := text;
+    #ok;
+  };
+
+  public query ({ caller }) func getMemory() : async Text {
+    if (not isAdminInternal(caller)) { return "" };
+    persistentMemory;
+  };
+
+  // ---- Messaging ----
+  public shared ({ caller }) func sendMessage(userMessage : Text) : async { #ok : Text; #err : Text } {
+    if (caller.isAnonymous()) {
+      return #err("Unauthorized: Please log in to send messages");
+    };
+    // Resolve API key: user's own key takes priority, fallback to shared admin key
+    let resolvedKey = switch (userApiKeys.get(caller)) {
+      case (?k) { if (k != "") { k } else { apiKey } };
+      case (null) { apiKey };
+    };
+    if (resolvedKey == "") {
       return #err("API key not configured. Please set your Anthropic API key in Settings.");
     };
     let existing = switch (conversationHistory.get(caller)) {
@@ -95,10 +158,10 @@ actor {
     let userMsg : Message = { role = "user"; content = userMessage };
     let withUser = existing.concat([userMsg]);
     let messagesJson = buildMessagesJson(withUser);
-    let sysPrompt = "You are a helpful cowork assistant. Help the user with their tasks, answer questions, and provide thoughtful guidance.";
-    let body = "{\"model\":\"claude-3-5-haiku-20241022\",\"max_tokens\":1024,\"system\":\"" # sysPrompt # "\",\"messages\":" # messagesJson # "}";
+    let sysPrompt = buildSystemPrompt();
+    let body = "{\"model\":\"claude-3-5-haiku-20241022\",\"max_tokens\":1024,\"system\":\"" # escapeJson(sysPrompt) # "\",\"messages\":" # messagesJson # "}";
     let headers : [Outcall.Header] = [
-      { name = "x-api-key"; value = apiKey },
+      { name = "x-api-key"; value = resolvedKey },
       { name = "anthropic-version"; value = "2023-06-01" },
       { name = "content-type"; value = "application/json" },
     ];
@@ -125,9 +188,8 @@ actor {
   };
 
   public query ({ caller }) func getHistory() : async [Message] {
-    // Require at least user-level permission
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only authenticated users can view history");
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized");
     };
     switch (conversationHistory.get(caller)) {
       case (?h) { h };
@@ -136,13 +198,13 @@ actor {
   };
 
   public shared ({ caller }) func clearHistory() : async () {
-    // Require at least user-level permission
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only authenticated users can clear history");
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized");
     };
     conversationHistory.remove(caller);
   };
 
+  // ---- JSON Helpers ----
   func buildMessagesJson(messages : [Message]) : Text {
     let parts = messages.map(func(msg : Message) : Text {
       "{\"role\":\"" # msg.role # "\",\"content\":\"" # escapeJson(msg.content) # "\"}"

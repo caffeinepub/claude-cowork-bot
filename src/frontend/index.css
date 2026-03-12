@@ -22,61 +22,66 @@
 
 @layer base {
   :root {
-    --radius: 0.75rem;
+    --radius: 0.5rem;
 
-    /* Dark terminal palette */
-    --background: 0.12 0.008 240;
-    --foreground: 0.92 0.01 240;
+    /* Cyberpunk dark palette */
+    --background: 0.08 0.012 270;
+    --foreground: 0.93 0.01 240;
 
-    --card: 0.16 0.01 240;
-    --card-foreground: 0.92 0.01 240;
+    --card: 0.11 0.016 270;
+    --card-foreground: 0.93 0.01 240;
 
-    --popover: 0.18 0.012 240;
-    --popover-foreground: 0.92 0.01 240;
+    --popover: 0.12 0.018 270;
+    --popover-foreground: 0.93 0.01 240;
 
-    /* Cyan/teal primary */
-    --primary: 0.78 0.14 195;
-    --primary-foreground: 0.08 0.01 240;
+    /* Neon magenta primary */
+    --primary: 0.72 0.28 330;
+    --primary-foreground: 0.06 0.01 270;
 
-    --secondary: 0.22 0.015 240;
+    --secondary: 0.16 0.02 270;
     --secondary-foreground: 0.85 0.01 240;
 
-    --muted: 0.20 0.012 240;
-    --muted-foreground: 0.55 0.02 240;
+    --muted: 0.15 0.018 270;
+    --muted-foreground: 0.52 0.04 240;
 
-    --accent: 0.25 0.02 240;
-    --accent-foreground: 0.92 0.01 240;
+    --accent: 0.18 0.022 270;
+    --accent-foreground: 0.93 0.01 240;
 
-    --destructive: 0.65 0.22 25;
+    --destructive: 0.60 0.22 25;
     --destructive-foreground: 0.97 0.005 25;
 
-    --border: 0.28 0.02 240;
-    --input: 0.22 0.015 240;
-    --ring: 0.78 0.14 195;
+    --border: 0.22 0.025 270;
+    --input: 0.17 0.02 270;
+    --ring: 0.72 0.28 330;
 
     /* Chat bubbles */
-    --user-bubble: 0.78 0.14 195;
-    --user-bubble-foreground: 0.08 0.01 240;
-    --assistant-bubble: 0.19 0.015 240;
+    --user-bubble: 0.72 0.28 330;
+    --user-bubble-foreground: 0.06 0.01 270;
+    --assistant-bubble: 0.13 0.018 270;
     --assistant-bubble-foreground: 0.90 0.01 240;
 
-    /* Glow */
-    --glow-cyan: 0.78 0.14 195;
-
-    --chart-1: 0.78 0.14 195;
-    --chart-2: 0.70 0.18 155;
-    --chart-3: 0.75 0.16 220;
-    --chart-4: 0.65 0.20 30;
-    --chart-5: 0.72 0.18 80;
-
-    --sidebar: 0.14 0.01 240;
-    --sidebar-foreground: 0.92 0.01 240;
-    --sidebar-primary: 0.78 0.14 195;
-    --sidebar-primary-foreground: 0.08 0.01 240;
-    --sidebar-accent: 0.22 0.015 240;
+    /* Sidebar */
+    --sidebar: 0.07 0.010 270;
+    --sidebar-foreground: 0.93 0.01 240;
+    --sidebar-primary: 0.72 0.28 330;
+    --sidebar-primary-foreground: 0.06 0.01 270;
+    --sidebar-accent: 0.16 0.02 270;
     --sidebar-accent-foreground: 0.85 0.01 240;
-    --sidebar-border: 0.28 0.02 240;
-    --sidebar-ring: 0.78 0.14 195;
+    --sidebar-border: 0.20 0.022 270;
+    --sidebar-ring: 0.72 0.28 330;
+
+    /* Glow colors */
+    --glow-magenta: 0.72 0.28 330;
+    --glow-cyan: 0.80 0.18 195;
+
+    /* Accent electric cyan */
+    --cyan: 0.80 0.18 195;
+
+    --chart-1: 0.72 0.28 330;
+    --chart-2: 0.80 0.18 195;
+    --chart-3: 0.65 0.20 270;
+    --chart-4: 0.65 0.20 30;
+    --chart-5: 0.70 0.18 80;
   }
 
   * {
@@ -103,16 +108,47 @@
     font-family: "Figtree", ui-sans-serif, sans-serif;
   }
 
+  /* Neon glow utilities — magenta */
+  .glow-magenta {
+    box-shadow: 0 0 16px oklch(var(--glow-magenta) / 0.4), 0 0 40px oklch(var(--glow-magenta) / 0.15);
+  }
+
+  .glow-magenta-text {
+    text-shadow: 0 0 12px oklch(var(--glow-magenta) / 0.7), 0 0 30px oklch(var(--glow-magenta) / 0.3);
+  }
+
+  /* Neon glow utilities — cyan */
   .glow-cyan {
-    box-shadow: 0 0 20px oklch(var(--glow-cyan) / 0.25);
+    box-shadow: 0 0 16px oklch(var(--glow-cyan) / 0.35), 0 0 40px oklch(var(--glow-cyan) / 0.12);
   }
 
   .glow-cyan-text {
-    text-shadow: 0 0 20px oklch(var(--glow-cyan) / 0.5);
+    text-shadow: 0 0 12px oklch(var(--glow-cyan) / 0.8), 0 0 30px oklch(var(--glow-cyan) / 0.35);
   }
 
+  /* Scanline overlay */
+  .bg-scanlines {
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.04) 2px,
+      rgba(0, 0, 0, 0.04) 4px
+    );
+  }
+
+  /* Grid background */
+  .bg-grid {
+    background-image:
+      linear-gradient(oklch(var(--border) / 0.3) 1px, transparent 1px),
+      linear-gradient(90deg, oklch(var(--border) / 0.3) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  /* Typing dots */
   .typing-dot {
     animation: typing-bounce 1.4s infinite ease-in-out;
+    background-color: oklch(var(--glow-magenta));
   }
 
   .typing-dot:nth-child(1) { animation-delay: 0s; }
@@ -122,6 +158,28 @@
   @keyframes typing-bounce {
     0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
     30% { transform: translateY(-6px); opacity: 1; }
+  }
+
+  /* Glitch shift animation for header */
+  @keyframes glitch-shift {
+    0%, 90%, 100% { clip-path: none; transform: none; }
+    92% { clip-path: polygon(0 20%, 100% 20%, 100% 40%, 0 40%); transform: translateX(-2px); }
+    94% { clip-path: polygon(0 55%, 100% 55%, 100% 75%, 0 75%); transform: translateX(2px); }
+    96% { clip-path: none; transform: none; }
+  }
+
+  .glitch-text {
+    animation: glitch-shift 8s infinite;
+  }
+
+  /* Pulse glow */
+  @keyframes pulse-glow-magenta {
+    0%, 100% { box-shadow: 0 0 8px oklch(var(--glow-magenta) / 0.3); }
+    50% { box-shadow: 0 0 24px oklch(var(--glow-magenta) / 0.7), 0 0 48px oklch(var(--glow-magenta) / 0.2); }
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow-magenta 2.5s ease-in-out infinite;
   }
 
   /* Scrollbar styling */
@@ -136,14 +194,17 @@
     border-radius: 2px;
   }
   .chat-scroll::-webkit-scrollbar-thumb:hover {
-    background: oklch(var(--muted-foreground));
+    background: oklch(var(--glow-magenta) / 0.5);
   }
 
-  /* Subtle grid background */
-  .bg-grid {
-    background-image:
-      linear-gradient(oklch(var(--border) / 0.3) 1px, transparent 1px),
-      linear-gradient(90deg, oklch(var(--border) / 0.3) 1px, transparent 1px);
-    background-size: 32px 32px;
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 3px;
+  }
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    background: oklch(var(--sidebar-border));
+    border-radius: 2px;
   }
 }
