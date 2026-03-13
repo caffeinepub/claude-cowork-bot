@@ -587,6 +587,187 @@ function LoginPrompt({ onLogin }: { onLogin: () => void }) {
   );
 }
 
+// ---- Landing Page ----
+function LandingPage({
+  onLogin,
+  isLoggingIn,
+}: { onLogin: () => void; isLoggingIn: boolean }) {
+  const benefits = [
+    {
+      icon: "🔒",
+      title: "Data ownership",
+      desc: "Conversations are stored in your canister, not on some company's servers you have no visibility into.",
+    },
+    {
+      icon: "🎫",
+      title: "Principal-gated access",
+      desc: "Only the people you allow (by Internet Identity principal) can use it.",
+    },
+    {
+      icon: "⛓️",
+      title: "No vendor lock-in",
+      desc: "The chat interface and history live on ICP, not a SaaS platform that can change pricing or shut down.",
+    },
+    {
+      icon: "🔑",
+      title: "Per-user API keys",
+      desc: "Each user pays Anthropic directly from their own key; you're not subsidising others' AI usage.",
+    },
+  ];
+
+  const limitations = [
+    {
+      icon: "👁️",
+      title: "Anthropic sees messages",
+      desc: "The AI call is off-chain; Anthropic still processes every message.",
+    },
+    {
+      icon: "🐢",
+      title: "Slower than normal chat",
+      desc: "HTTP outcalls go through ICP consensus, adding latency.",
+    },
+    {
+      icon: "🔄",
+      title: "State resets on redeploy",
+      desc: "API keys need re-entering after each new deployment.",
+    },
+    {
+      icon: "🪞",
+      title: "It's a Claude wrapper",
+      desc: "Anthropic already offers this at claude.ai; the value here is privacy and control.",
+    },
+  ];
+
+  return (
+    <div data-ocid="landing.section" className="flex-1 overflow-y-auto">
+      <div className="max-w-3xl mx-auto px-4 py-12 space-y-12">
+        {/* Hero */}
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="text-center space-y-4"
+        >
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/40 flex items-center justify-center glow-magenta">
+              <span className="text-3xl">🤖</span>
+            </div>
+          </div>
+          <h1 className="font-mono font-bold text-4xl md:text-5xl text-foreground glitch-text glow-cyan-text leading-tight">
+            Claude Wrap Bot
+          </h1>
+          <p className="text-muted-foreground font-mono text-base md:text-lg max-w-lg mx-auto">
+            A private, on-chain Claude wrapper.{" "}
+            <span className="text-primary font-semibold">
+              You own the data.
+            </span>
+          </p>
+        </motion.div>
+
+        {/* Benefits */}
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.15 }}
+          className="space-y-4"
+        >
+          <h2 className="font-mono text-sm font-semibold text-primary uppercase tracking-widest flex items-center gap-2">
+            <span className="inline-block w-8 h-px bg-primary/60" />
+            Why this exists
+            <span className="inline-block flex-1 h-px bg-primary/20" />
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {benefits.map((b, i) => (
+              <motion.div
+                key={b.title}
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, delay: 0.2 + i * 0.08 }}
+                className="bg-card border border-border rounded-xl p-4 space-y-1.5 hover:border-primary/40 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{b.icon}</span>
+                  <span className="font-mono font-semibold text-sm text-foreground">
+                    {b.title}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed font-body pl-7">
+                  {b.desc}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* Limitations */}
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.35 }}
+          className="space-y-4"
+        >
+          <h2 className="font-mono text-sm font-semibold text-amber-400 uppercase tracking-widest flex items-center gap-2">
+            <span className="inline-block w-8 h-px bg-amber-400/60" />
+            Honest limitations
+            <span className="inline-block flex-1 h-px bg-amber-400/20" />
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {limitations.map((l, i) => (
+              <motion.div
+                key={l.title}
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, delay: 0.4 + i * 0.08 }}
+                className="bg-card border border-border rounded-xl p-4 space-y-1.5 hover:border-amber-400/30 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{l.icon}</span>
+                  <span className="font-mono font-semibold text-sm text-amber-400/90">
+                    {l.title}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed font-body pl-7">
+                  {l.desc}
+                </p>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* CTA */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+          className="text-center space-y-6 pb-4"
+        >
+          <p className="text-sm text-muted-foreground font-mono max-w-md mx-auto leading-relaxed">
+            The point is{" "}
+            <span className="text-foreground font-semibold">
+              privacy and control
+            </span>{" "}
+            — if those matter to you, there's value here.
+          </p>
+          <Button
+            data-ocid="landing.login_button"
+            onClick={onLogin}
+            disabled={isLoggingIn}
+            size="lg"
+            className="font-mono text-sm gap-2.5 bg-primary text-primary-foreground hover:bg-primary/90 px-8 py-5 glow-magenta shadow-glow-sm"
+          >
+            {isLoggingIn ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <LogIn className="h-4 w-4" />
+            )}
+            {isLoggingIn ? "Connecting..." : "Connect with Internet Identity"}
+          </Button>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
 // ---- Thread Sidebar ----
 function ThreadSidebar({
   threads,
@@ -1114,7 +1295,7 @@ export default function App() {
               <span className="text-base">🤖</span>
             </div>
             <span className="font-mono font-semibold text-foreground text-sm tracking-tight glow-cyan-text glitch-text">
-              Claude Cowork Bot
+              Claude Wrap Bot
             </span>
             <Badge
               variant="outline"
@@ -1194,6 +1375,11 @@ export default function App() {
 
       {/* Body: sidebar + chat */}
       <div className="relative flex flex-1 overflow-hidden">
+        {/* Landing page when logged out */}
+        {!isLoggedIn && (
+          <LandingPage onLogin={login} isLoggingIn={isLoggingIn} />
+        )}
+
         {/* Thread sidebar (only when logged in) */}
         {isLoggedIn && (
           <ThreadSidebar
@@ -1209,75 +1395,77 @@ export default function App() {
         )}
 
         {/* Chat main area */}
-        <main className="flex-1 overflow-hidden flex flex-col">
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto chat-scroll py-4">
-            {hasMessages ? (
-              <div className="space-y-1">
-                <AnimatePresence initial={false}>
-                  {messages.map((msg, idx) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: messages are append-only
-                    <MessageBubble key={idx} message={msg} index={idx} />
-                  ))}
-                </AnimatePresence>
-                <AnimatePresence>
-                  {isSending && <TypingIndicator />}
-                </AnimatePresence>
-              </div>
-            ) : isSending ? (
-              <div className="space-y-1">
-                <AnimatePresence>
-                  {isSending && <TypingIndicator />}
-                </AnimatePresence>
-              </div>
-            ) : (
-              <EmptyState />
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input */}
-          <div className="flex-none border-t border-border bg-background/90 backdrop-blur-sm">
-            {isLoggedIn ? (
-              <div className="px-4 py-3">
-                <div className="flex items-end gap-2 bg-card border border-border rounded-xl px-3 py-2 focus-within:border-primary/50 transition-colors">
-                  <Textarea
-                    ref={textareaRef}
-                    data-ocid="chat.input"
-                    value={inputValue}
-                    onChange={handleTextareaChange}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Ask Claude anything... (Enter to send, Shift+Enter for newline)"
-                    rows={1}
-                    className="flex-1 resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm placeholder:text-muted-foreground/60 min-h-[36px] max-h-[140px] py-1.5 font-body"
-                    style={{ height: "36px" }}
-                  />
-                  <Button
-                    data-ocid="chat.submit_button"
-                    onClick={handleSend}
-                    disabled={
-                      !inputValue.trim() || isSending || !activeThreadId
-                    }
-                    size="icon"
-                    className="flex-shrink-0 h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-glow-sm disabled:opacity-40 rounded-lg transition-all"
-                    aria-label="Send message"
-                  >
-                    {isSending ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Send className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
+        {isLoggedIn && (
+          <main className="flex-1 overflow-hidden flex flex-col">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto chat-scroll py-4">
+              {hasMessages ? (
+                <div className="space-y-1">
+                  <AnimatePresence initial={false}>
+                    {messages.map((msg, idx) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: messages are append-only
+                      <MessageBubble key={idx} message={msg} index={idx} />
+                    ))}
+                  </AnimatePresence>
+                  <AnimatePresence>
+                    {isSending && <TypingIndicator />}
+                  </AnimatePresence>
                 </div>
-                <p className="text-[10px] text-muted-foreground/50 text-center mt-1.5 font-mono">
-                  Conversation stored on-chain · Internet Computer
-                </p>
-              </div>
-            ) : (
-              <LoginPrompt onLogin={login} />
-            )}
-          </div>
-        </main>
+              ) : isSending ? (
+                <div className="space-y-1">
+                  <AnimatePresence>
+                    {isSending && <TypingIndicator />}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <EmptyState />
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className="flex-none border-t border-border bg-background/90 backdrop-blur-sm">
+              {isLoggedIn ? (
+                <div className="px-4 py-3">
+                  <div className="flex items-end gap-2 bg-card border border-border rounded-xl px-3 py-2 focus-within:border-primary/50 transition-colors">
+                    <Textarea
+                      ref={textareaRef}
+                      data-ocid="chat.input"
+                      value={inputValue}
+                      onChange={handleTextareaChange}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Ask Claude anything... (Enter to send, Shift+Enter for newline)"
+                      rows={1}
+                      className="flex-1 resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm placeholder:text-muted-foreground/60 min-h-[36px] max-h-[140px] py-1.5 font-body"
+                      style={{ height: "36px" }}
+                    />
+                    <Button
+                      data-ocid="chat.submit_button"
+                      onClick={handleSend}
+                      disabled={
+                        !inputValue.trim() || isSending || !activeThreadId
+                      }
+                      size="icon"
+                      className="flex-shrink-0 h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-glow-sm disabled:opacity-40 rounded-lg transition-all"
+                      aria-label="Send message"
+                    >
+                      {isSending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Send className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/50 text-center mt-1.5 font-mono">
+                    Conversation stored on-chain · Internet Computer
+                  </p>
+                </div>
+              ) : (
+                <LoginPrompt onLogin={login} />
+              )}
+            </div>
+          </main>
+        )}
       </div>
 
       {/* Footer */}
