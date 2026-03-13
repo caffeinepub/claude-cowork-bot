@@ -635,16 +635,28 @@ function ThreadSidebar({
           <span className="font-mono text-xs font-semibold text-sidebar-foreground/70 uppercase tracking-widest">
             Threads
           </span>
-          <Button
-            data-ocid="threads.add_button"
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-sidebar-foreground/60 hover:text-primary hover:bg-primary/10 transition-colors"
-            onClick={onCreateThread}
-            aria-label="New thread"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              data-ocid="threads.add_button"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-sidebar-foreground/60 hover:text-primary hover:bg-primary/10 transition-colors"
+              onClick={onCreateThread}
+              aria-label="New thread"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              data-ocid="threads.toggle"
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-sidebar-foreground/60 hover:text-primary hover:bg-primary/10 transition-colors"
+              onClick={onToggleCollapse}
+              aria-label="Collapse sidebar"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
 
         <ScrollArea className="flex-1">
@@ -722,22 +734,18 @@ function ThreadSidebar({
         </ScrollArea>
       </motion.aside>
 
-      {/* Collapse toggle */}
-      <button
-        type="button"
-        data-ocid="threads.toggle"
-        onClick={onToggleCollapse}
-        className="flex-none w-4 bg-sidebar border-r border-sidebar-border hover:bg-primary/10 transition-colors flex items-center justify-center group cursor-col-resize"
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground">
-          {collapsed ? (
-            <ChevronRight className="h-3 w-3" />
-          ) : (
-            <ChevronLeft className="h-3 w-3" />
-          )}
-        </div>
-      </button>
+      {/* Expand tab — only visible when collapsed */}
+      {collapsed && (
+        <button
+          type="button"
+          data-ocid="threads.toggle"
+          onClick={onToggleCollapse}
+          aria-label="Expand sidebar"
+          className="flex-none w-6 bg-sidebar border-r border-sidebar-border hover:bg-primary/10 transition-colors flex items-center justify-center text-primary/70 hover:text-primary"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      )}
 
       {/* Rename dialog */}
       <Dialog
